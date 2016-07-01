@@ -129,10 +129,7 @@ def ParseRSS(opml):
 
 		for article in articles.entries:
 			try:
-				articleId = hashlib.new("ripemd160")
-				articleId.update(article.id)
-
-				fileName = os.path.join(path,articleId.hexdigest())
+				fileName = os.path.join(path,str(int(hashlib.md5(article.id).hexdigest(), 16)))
 			except AttributeError, e:
 				print ("Failed to get Article ID from feed " + feed.title)
 			except IOError, e:
@@ -157,9 +154,9 @@ def ParseRSS(opml):
 					print ("Failed to fetch content from feed " + article.link)
 				except UnicodeEncodeError, e:
 					print ("Unicode error on article " + article.link)
+			elif (os.path.exists(fileName)):
+				print ("Post " + article.link + " already exists")
 
-
-#
 #					parsedArticle = ParsedArticle(fileName, feed.title, article.title, article.link)
 #					parsedArticles.append(parsedArticle)
 
