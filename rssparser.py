@@ -123,9 +123,13 @@ def ParseRSS(opml):
 				print ("Unicode error on article " + article.link)
 
 			try:
-				fileName = os.path.join(path,Document(response).short_title()) + '.html'
+				fileName = os.path.join(path, unicode(feed.title).encode("utf-8"), unicode(article.title_detail['value']).encode("utf-8"))
+				directory = os.path.dirname(fileName)
+
+				if not os.path.exists(directory):
+					os.makedirs(directory)
 			except AttributeError, e:
-				print ("Failed to get Article ID from feed " + feed.title)
+				print ("Failed to get Article Title from feed " + feed.title)
 			except IOError, e:
 				print ("Failed to find file " + fileName)
 			except UnicodeEncodeError, e:
@@ -139,20 +143,19 @@ def ParseRSS(opml):
 							htmlFile.close
 				except AttributeError, e:
 					print ("Failed to get Article Link from feed " + feed.title)
+				except IOError, e:
+					print ("Failed to find file " + fileName)
 			elif (os.path.exists(fileName)):
 				print ("Post " + article.link + " already exists")
 
-#					parsedArticle = ParsedArticle(fileName, feed.title, article.title, article.link)
-#					parsedArticles.append(parsedArticle)
+			parsedArticle = ParsedArticle(fileName, feed.title, article.title, article.link)
+			parsedArticles.append(parsedArticle)
 
-#	return parsedArticles
+	return parsedArticles
 		
 		
 def main():
-	#SendBook(ConvertBook(ParseRSS(sys.argv[1])))
 	ParseRSS(sys.argv[1])
-
-	#print "The Magic Medicine Worked......................Plam!"
 
 
 if __name__ == '__main__':
