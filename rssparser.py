@@ -1,14 +1,12 @@
 #! /usr/bin/python
-
 import sys
 import feedparser
-import socket
 import urllib2
 import os
 import opml
-import string
 import hashlib
-from time import sleep
+from bs4 import BeautifulSoup
+from readability.readability import Document
 
 class ParsedArticle:
 	filePath = None,
@@ -72,33 +70,6 @@ class Sender:
 		os.system("calibre-smtp -a '" + self.filePath + ".mobi'" + self.user + self.password + self.server + self.port + self.sender + self.recipient + " ''")
 
 
-def TrimString(string):
-	valid_chars = "-_.() abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	return ''.join(c for c in string if c in valid_chars)
-
-
-def ConvertBook(parsedArticles):
-	# Parameters chosen accordingly to the Calibre documentation: http://manual.calibre-ebook.com/cli/ebook-convert.html
-		# ebook-convert
-		# --author-sort
-		#--authors
-		#--book-producer
-		#--comments
-		#--cover
-		#--pubdate
-		#--publisher
-		#--series
-		#--series-index
-		#--title
-		#--title-sort
-
-	for article in parsedArticles:
-		convertParams = "'" + article.filePath + "' '" + article.filePath + ".mobi'" + " --author-sort '" + TrimString(article.feedTitle) + "' --authors '" + TrimString(article.feedTitle) + "' --book-producer 'Jacques Book Converter powered by Calibre eBook" + "' --comments '" + TrimString(article.articleTitle) + "' --publisher 'Jacques Book Converter powered by Calibre eBook" + "' --series '" + TrimString(article.feedTitle) + "' --series-index '" + TrimString(article.feedTitle) + "' --title '" + TrimString(article.articleTitle) + "' --title-sort '" + TrimString(article.articleTitle) + "' --max-toc-links 0"
-		os.system("ebook-convert " + convertParams)
-
-	return parsedArticles
-
-
 def SendBook(parsedArticles):
 	c = 0
 	for article in parsedArticles:
@@ -109,9 +80,23 @@ def SendBook(parsedArticles):
 		sender = Sender(article.filePath)
 
 
+def AddMetaTag(htmlDocument):
+	h = BeautifulSoup(htmlDocument, 'lxml')
+	
+	headTag = h.new_tag('head')
+
+	metaTag = h.new_tag('meta')
+	metaTag['content'] = 'text/html; charset=UTF-8'
+	metaTag['http-equiv'] = 'Content-Type'
+
+	h.html.insert(0, headTag)
+	h.html.head.insert(0, metaTag)
+
+	return h
+
+
 def ParseRSS(opml):
 	parsedArticles = []
-	socket.setdefaulttimeout(120)
 	header = {
 				'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11',
 				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -125,11 +110,20 @@ def ParseRSS(opml):
 	for feed in opml.getFeedList():
 		articles = feedparser.parse(feed.xmlUrl)
 		fileName = ""
-		path = "/tmp/RSS/"
+		path = "/home/thiago/Documents/RSS/"
 
 		for article in articles.entries:
 			try:
-				fileName = os.path.join(path,str(int(hashlib.md5(article.id).hexdigest(), 16)))
+				request = urllib2.Request(unicode(article.link).encode("utf-8"), headers=header)
+				response = urllib2.urlopen(request).read()
+			except urllib2.HTTPError, e:
+				print e.fp.read()
+				print ("Failed to fetch content from feed " + article.link)
+			except UnicodeEncodeError, e:
+				print ("Unicode error on article " + article.link)
+
+			try:
+				fileName = os.path.join(path,Document(response).short_title()) + '.html'
 			except AttributeError, e:
 				print ("Failed to get Article ID from feed " + feed.title)
 			except IOError, e:
@@ -139,21 +133,12 @@ def ParseRSS(opml):
 
 			if ((not os.path.exists(fileName)) and (fileName != "")):
 				try:
-					request = urllib2.Request(unicode(article.link).encode("utf-8"), headers=header)
-
 					if not(os.path.isfile(fileName)):
 						with open(fileName, "wb") as htmlFile:
-							response = urllib2.urlopen(request)
-
-							htmlFile.write(response.read())
+							htmlFile.write(AddMetaTag(Document(response).summary()).encode('utf-8').strip())
 							htmlFile.close
 				except AttributeError, e:
 					print ("Failed to get Article Link from feed " + feed.title)
-				except urllib2.HTTPError, e:
-					print e.fp.read()
-					print ("Failed to fetch content from feed " + article.link)
-				except UnicodeEncodeError, e:
-					print ("Unicode error on article " + article.link)
 			elif (os.path.exists(fileName)):
 				print ("Post " + article.link + " already exists")
 
@@ -165,8 +150,7 @@ def ParseRSS(opml):
 		
 def main():
 	#SendBook(ConvertBook(ParseRSS(sys.argv[1])))
-	opmlFile = sys.argv[1]
-	print(ParseRSS(opmlFile))
+	ParseRSS(sys.argv[1])
 
 	#print "The Magic Medicine Worked......................Plam!"
 
